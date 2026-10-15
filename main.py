@@ -7,29 +7,40 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from fuzzy_logic import evaluate_patient
 
 
-def show_graphs(hr, rr, spo2, sbp, temp, urgency, stab_time):
-    fig, axs = plt.subplots(2, 1, figsize=(6, 4))
-    fig.tight_layout(pad=4.0)
-
-    vital_names = ['HR', 'RR', 'SpO2', 'SBP', 'Temp']
-    vital_values = [hr, rr, spo2, sbp, temp]
-    axs[0].bar(vital_names, vital_values, color='skyblue')
-    axs[0].set_title('Hasta Girdi Değerleri')
-    axs[0].set_ylabel('Değer')
-
-    axs[1].bar(['Aciliyet', 'Stabilizasyon Süresi'], [urgency, stab_time], color='salmon')
-    axs[1].set_title('Çıkışlar')
-    axs[1].set_ylabel('Skor / Zaman')
-
-    for ax in axs:
-        ax.set_ylim(0, 10)
-
+def show_graphs(hr, rr, spo2, sbp, temp, urgency, stab_index):
+    """Present different-unit inputs in a table and both indices on a 0-100 plot."""
+    fig, (ax_inputs, ax_output) = plt.subplots(2, 1, figsize=(8.5, 6.5))
+    ax_inputs.axis('off')
+    rows = [
+        ['Nabız', f'{hr:g}', 'atım/dk'],
+        ['Solunum', f'{rr:g}', 'soluk/dk'],
+        ['SpO₂', f'{spo2:g}', '%'],
+        ['Sistolik tansiyon', f'{sbp:g}', 'mmHg'],
+        ['Sıcaklık', f'{temp:g}', '°C'],
+    ]
+    table = ax_inputs.table(
+        cellText=rows, colLabels=['Girdi', 'Değer', 'Birim'],
+        loc='center', cellLoc='center'
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 1.5)
+    ax_inputs.set_title('Hayati belirti girdileri (farklı birimler)')
+    labels = ['Aciliyet endeksi', 'Stabilizasyon endeksi']
+    bars = ax_output.bar(labels, [urgency, stab_index],
+                         color=['#cc735b', '#4c83ac'], width=0.55)
+    ax_output.set_ylim(0, 100)
+    ax_output.set_ylabel('Model endeksi (0-100)')
+    for bar, value in zip(bars, [urgency, stab_index]):
+        ax_output.text(bar.get_x() + bar.get_width() / 2,
+                       min(99, value + 2), f'{value:.1f}', ha='center')
+    fig.tight_layout(pad=2.5)
     top = tk.Toplevel()
-    top.title("Grafikler")
-
+    top.title('Bulanık model çıktıları - klinik amaçlı değildir')
     canvas = FigureCanvasTkAgg(fig, master=top)
     canvas.draw()
-    canvas.get_tk_widget().pack()
+    canvas.get_tk_widget().pack(fill='both', expand=True)
+    top.protocol('WM_DELETE_WINDOW', lambda: (plt.close(fig), top.destroy()))
 
 
 def calculate():
@@ -40,20 +51,23 @@ def calculate():
         sbp_val = float(entry_sbp.get())
         temp_val = float(entry_temp.get())
 
-        urgency, stab_time = evaluate_patient(hr_val, rr_val, spo2_val, sbp_val, temp_val)
-
-        result_label.config(text=f"Acil Müdahale Seviyesi: {urgency:.2f} / Stabilizasyon Süresi: {stab_time:.2f}")
-
-        show_graphs(hr_val, rr_val, spo2_val, sbp_val, temp_val, urgency, stab_time)
-
-    except ValueError:
-        messagebox.showerror("Hata", "Lütfen tüm alanlara geçerli sayılar girin.")
+        urgency, stab_index = evaluate_patient(
+            hr_val, rr_val, spo2_val, sbp_val, temp_val
+        )
+        result_label.config(
+            text=f'Aciliyet endeksi: {urgency:.2f}/100 | '
+                 f'Stabilizasyon endeksi: {stab_index:.2f}/100'
+        )
+        show_graphs(hr_val, rr_val, spo2_val, sbp_val, temp_val,
+                    urgency, stab_index)
+    except ValueError as exc:
+        messagebox.showerror('Geçersiz girdi / hesaplama', str(exc))
 
 
 # UI kurulumu
 root = tk.Tk()
-root.title("Yoğun Bakım Stabilite Değerlendirme Sistemi")
-root.geometry("500x500")
+root.title("Bulanık Mantık - Hayati Belirti Değerlendirme Prototipi")
+root.geometry("620x570")
 root.resizable(False, False)
 
 style = ttk.Style()
@@ -83,10 +97,13 @@ entry_spo2 = entries['spo2']
 entry_sbp = entries['sbp']
 entry_temp = entries['temp']
 
-calc_button = ttk.Button(root, text="Değerlendir ve Grafikleri Göster", command=calculate)
+warning_label = ttk.Label(root, text="Eğitim amaçlı prototip; klinik karar ve tedavi için kullanılamaz.", foreground="red")
+warning_label.pack(pady=6)
+
+calc_button = ttk.Button(root, text="Endeksleri Hesapla ve Grafikleri Göster", command=calculate)
 calc_button.pack(pady=20)
 
-result_label = ttk.Label(root, text="Sonuçlar burada gösterilecek", foreground="blue")
+result_label = ttk.Label(root, text="Endeksler burada gösterilecek (süre tahmini değildir).", foreground="blue")
 result_label.pack(pady=10)
 
 root.mainloop()
